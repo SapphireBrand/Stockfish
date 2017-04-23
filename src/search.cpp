@@ -975,9 +975,17 @@ moves_loop: // When in check search starts from here
           else
           {
               // Increase reduction for cut nodes
-              if (cutNode)
+              if (cutNode) {
                   r += 2 * ONE_PLY;
 
+                  // Reduce depth for returning to the square previously occupied.
+                  if (!inCheck && !givesCheck && pos.non_pawn_material(~pos.side_to_move()) >= RookValueMg)
+                  {
+                      auto ourLastMove = (ss - 2)->currentMove;
+                      if (to_sq(move) == from_sq(ourLastMove) && from_sq(move) == to_sq(ourLastMove))
+                          r += ONE_PLY;
+                  }
+              }
               // Decrease reduction for moves that escape a capture. Filter out
               // castling moves, because they are coded as "king captures rook" and
               // hence break make_move().
