@@ -996,6 +996,12 @@ moves_loop: // When in check search starts from here
               else if (ss->history < 0 && (ss-1)->history > 0)
                   r += ONE_PLY;
 
+			  auto stage = mp.Stage();
+			  if (stage == GOOD_CAPTURES || stage == KILLERS || stage == COUNTERMOVE)
+			  {
+				  r -= ONE_PLY;
+			  }
+
               // Decrease/increase reduction for moves with a good/bad history
               r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->history / 20000) * ONE_PLY);
           }
