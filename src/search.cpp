@@ -1002,9 +1002,23 @@ moves_loop: // When in check search starts from here
 
           Depth d = std::max(newDepth - r, ONE_PLY);
 
-          value = -search<NonPV>(pos, ss+1, -(alpha+1), -alpha, d, true, false);
+			// Iteratively increase depth. If we fail high, we could simply extend to full depth, in which
+			// case the full depth search might iteratively deepen in order to improve move ordering.
+			// But if any of those intermediate searches fail low, then we could take that as an LMR cutoff.
+			// This loop cuts off at the first iteration that fails low.
+			doFullDepthSearch = false;
+			do {
+				assert(d <= newDepth);
+				value = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, d, true, false);
 
-          doFullDepthSearch = (value > alpha && d != newDepth);
+				if (value <= alpha) break;
+				if (d == newDepth) break;
+
+				// Increasing by 2 ply because of potential odd/even behaviors from stm/tempo.
+				// But of course, we can only increase up to newDepth.
+				if (++d < newDepth) ++d;
+
+			} while (true);
       }
       else
           doFullDepthSearch = !PvNode || moveCount > 1;
