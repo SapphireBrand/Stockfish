@@ -989,6 +989,10 @@ moves_loop: // When in check search starts from here
               else if (ss->statScore < 0 && (ss-1)->statScore > 0)
                   r += ONE_PLY;
 
+			  // Total: 38915 W: 7011 L: 6971 D: 24933 (!inCheck && !givesCheck && to_sq(move) == from_sq((ss - 2)->currentMove) && from_sq(move) == to_sq((ss - 2)->currentMove)) r += ONE_PLY;
+              if (!inCheck && !givesCheck && to_sq(move) == from_sq((ss - 2)->currentMove) && from_sq(move) == to_sq((ss - 2)->currentMove))
+                  r += 2 * ONE_PLY;
+
               // Decrease/increase reduction for moves with a good/bad history
               r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->statScore / 20000) * ONE_PLY);
           }
