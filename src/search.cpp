@@ -966,9 +966,11 @@ moves_loop: // When in check search starts from here
                   r += ONE_PLY;
 
               // Increase reduction for cut nodes
-              if (cutNode)
+              if (cutNode) {
                   r += 2 * ONE_PLY;
 
+                  // Total: 35392 W: 6428 L: 6402 D: 22562: if (!inCheck && newDepth <= 9 && type_of(moved_piece) == KING && type_of(move) == NORMAL && pos.non_pawn_material(~pos.side_to_move()) >= QueenValueMg) r += ONE_PLY;
+              }
               // Decrease reduction for moves that escape a capture. Filter out
               // castling moves, because they are coded as "king captures rook" and
               // hence break make_move().
@@ -989,9 +991,27 @@ moves_loop: // When in check search starts from here
               else if (ss->statScore < 0 && (ss-1)->statScore > 0)
                   r += ONE_PLY;
 
+              // Total: 61156 W: 10916 L: 10784 D: 39456 if (newDepth <= 3 && type_of(moved_piece) == KING) r += ONE_PLY;
+              // Total: 18686 W: 3358 L: 3404 D: 11924 if (r == rBeforeHistoryAdjustment && newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) r += ONE_PLY;
+              // Total: 65301 W: 12015 L: 11860 D: 41426 if (newDepth <= 5 && !inCheck && type_of(moved_piece) == KING && pos.non_pawn_material(WHITE) > RookValueMg && pos.non_pawn_material(BLACK) > RookValueMg) r += ONE_PLY;
+              // STC: 13458 W: 2498 L: 2316 D: 8644 LTC: 22302 W: 2815 L: 2861 D: 16626 if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) r += ONE_PLY;
+              // STC: 16266 W: 3024 L: 2830 D: 10412 LTC: 10629 W: 1334 L: 1418 D: 7877 if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && pos.non_pawn_material() > 0) r += ONE_PLY;
+              // Total: 25696 W: 4603 L: 4619 D: 16474 if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && type_of(move) == NORMAL && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) r += ONE_PLY;
+
+              if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) {
+                  r += type_of(move) == NORMAL ? ONE_PLY : -2 * ONE_PLY;
+              }
+
               // Decrease/increase reduction for moves with a good/bad history
               r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->statScore / 20000) * ONE_PLY);
           }
+
+          // Total: 165032 W: 30045 L: 29220 D: 105767: if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && pos.non_pawn_material(WHITE) >= RookValueEg && pos.non_pawn_material(BLACK) >= RookValueEg) r += ONE_PLY;
+          // Total: 45101 W: 8148 L: 8082 D: 28871 if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && type_of(move) == NORMAL && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) r += ONE_PLY;
+          // Total: 35911 W: 6470 L: 6443 D: 22998 if (newDepth <= 4 && type_of(moved_piece) == KING && !inCheck && type_of(move) == NORMAL && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) r += ONE_PLY;
+          // Total: 12018 W: 2128 L: 2202 D: 7688 if (newDepth <= 5 && type_of(moved_piece) == KING && !inCheck && type_of(move) == NORMAL && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) r += ONE_PLY;
+          // Total: 13703 W : 2414 L : 2481 D : 8808 if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck) extend castling else if if (pos.non_pawn_material(~pos.side_to_move()) > RookValueMg) shorten
+          // Total: 22197 W: 3960 L: 3991 D: 14246 extend castling if !ttCapture else if non_pawn_material(~pos.side_to_move()) > RookValueMg then -2ply for moving king before castling, else -1ply if newDepth <= 3.
 
           Depth d = std::max(newDepth - r, ONE_PLY);
 
