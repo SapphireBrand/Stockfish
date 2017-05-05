@@ -1000,6 +1000,10 @@ moves_loop: // When in check search starts from here
               r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->history / 20000) * ONE_PLY);
           }
 
+          if (newDepth <= 3)
+              if (3 <= quietCount && quietCount <= 8)
+                  r += ONE_PLY;
+
           Depth d = std::max(newDepth - r, ONE_PLY);
 
           value = -search<NonPV>(pos, ss+1, -(alpha+1), -alpha, d, true, false);
