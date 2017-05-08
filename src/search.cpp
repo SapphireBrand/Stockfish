@@ -989,6 +989,8 @@ moves_loop: // When in check search starts from here
                            + thisThread->history.get(~pos.side_to_move(), move)
                            - 4000; // Correction factor
 
+              auto rBeforeHistoryAdjustment = r;
+
               // Decrease/increase reduction by comparing opponent's stat score
               if (ss->history > 0 && (ss-1)->history < 0)
                   r -= ONE_PLY;
@@ -997,7 +999,17 @@ moves_loop: // When in check search starts from here
                   r += ONE_PLY;
 
               // Decrease/increase reduction for moves with a good/bad history
-              r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->history / 20000) * ONE_PLY);
+              r -= (ss->history * ONE_PLY) / 20000;
+
+              // If history tells us about this move, then try domain knowledge...
+              if (r != rBeforeHistoryAdjustment)
+              {
+                  // Reduce king near the leaves...
+                  if (newDepth <= 3 && type_of(moved_piece) == KING && !inCheck && pos.non_pawn_material(~pos.side_to_move()) > RookValueMg)
+                      r += ONE_PLY;
+              }
+
+              r = std::max(DEPTH_ZERO, r);
           }
 
           Depth d = std::max(newDepth - r, ONE_PLY);
