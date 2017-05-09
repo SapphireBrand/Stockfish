@@ -969,7 +969,14 @@ moves_loop: // When in check search starts from here
           Depth r = reduction<PvNode>(improving, depth, moveCount);
 
           if (captureOrPromotion)
-              r -= r ? ONE_PLY : DEPTH_ZERO;
+          {
+              // Captures/promotions are only eligible for LMR if moveCountPruning is set, which requires moderate depth (e.g., < 16)
+              // and moveCount > FutilityMoveCounts. At very low depth it is possible to have good captures at moveCount > FutilityMoveCounts,
+              // and if so then we extend one ply. If the position has sufficient material then we will also extend bad captures.
+              if (r > DEPTH_ZERO)
+                  if (mp.get_stage() != BAD_CAPTURES || pos.non_pawn_material(~pos.side_to_move()) > QueenValueMg + RookValueMg)
+                      r -= ONE_PLY;
+          }
           else
           {
               // Increase reduction for cut nodes
