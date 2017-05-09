@@ -972,6 +972,14 @@ moves_loop: // When in check search starts from here
               r -= r ? ONE_PLY : DEPTH_ZERO;
           else
           {
+              // If the opponent played a null move, then a quiet move is unlikely to be a refutation.
+              // (And even if it is, a fail-high on a null search just means that the opponent will try
+              // a real move, and probably fail-low.) So an additional reduction is pretty safe.
+              if (!givesCheck && 0 < pos.pliesFromNull() && pos.pliesFromNull() < ss->ply && (pos.pliesFromNull() & 1))
+              {
+                  r += ONE_PLY;
+              }
+
               // Increase reduction for cut nodes
               if (cutNode)
                   r += 2 * ONE_PLY;
