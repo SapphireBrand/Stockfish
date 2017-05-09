@@ -156,6 +156,10 @@ public:
   Score psq_score() const;
   Value non_pawn_material(Color c) const;
   Value non_pawn_material() const;
+  inline int pliesFromNull() const
+  {
+      return st->pliesFromNull;
+  }
 
   // Position consistency check, for debugging
   bool pos_is_ok(int* failedStep = nullptr) const;

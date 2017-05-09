@@ -972,6 +972,15 @@ moves_loop: // When in check search starts from here
               r -= r ? ONE_PLY : DEPTH_ZERO;
           else
           {
+              // If the side to move played a null move earlier, then this variation isn't going so well.
+              // Reducing another ply is a way to try to find an easy refutation elsewhere, rather than investing a lot
+              // hoping that this variation will go well. Note that the worst case is that we reject the null move,
+              // which still does not cause a search error to be made.
+              if (!inCheck && !givesCheck && 0 < pos.pliesFromNull() && pos.pliesFromNull() < ss->ply && 0 == (pos.pliesFromNull() & 1))
+              {
+                  r += ONE_PLY;
+              }
+
               // Increase reduction for cut nodes
               if (cutNode)
                   r += 2 * ONE_PLY;
