@@ -974,8 +974,21 @@ moves_loop: // When in check search starts from here
           {
               // Increase reduction for cut nodes
               if (cutNode)
-                  r += 2 * ONE_PLY;
-
+              {
+                  if (inCheck)
+                      r += ONE_PLY;
+                  else if (newDepth == 6)
+                  {
+                      if (quietCount == 0)
+                          r += ONE_PLY;
+                      else if (quietCount < 3)
+                          r += 2 * ONE_PLY;
+                      else
+                          r += 3 * ONE_PLY;
+                  }
+                  else
+                      r += 2 * ONE_PLY;
+              }
               // Decrease reduction for moves that escape a capture. Filter out
               // castling moves, because they are coded as "king captures rook" and
               // hence break make_move().
