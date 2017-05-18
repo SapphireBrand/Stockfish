@@ -25,15 +25,6 @@
 
 namespace {
 
-  enum Stages {
-    MAIN_SEARCH, CAPTURES_INIT, GOOD_CAPTURES, KILLERS, COUNTERMOVE, QUIET_INIT, QUIET, BAD_CAPTURES,
-    EVASION, EVASIONS_INIT, ALL_EVASIONS,
-    PROBCUT, PROBCUT_INIT, PROBCUT_CAPTURES,
-    QSEARCH_WITH_CHECKS, QCAPTURES_1_INIT, QCAPTURES_1, QCHECKS,
-    QSEARCH_NO_CHECKS, QCAPTURES_2_INIT, QCAPTURES_2,
-    QSEARCH_RECAPTURES, QRECAPTURES
-  };
-
   // partial_insertion_sort() sorts moves in descending order up to and including
   // a given limit. The order of moves smaller than the limit is left unspecified.
   void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {

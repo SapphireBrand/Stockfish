@@ -974,7 +974,20 @@ moves_loop: // When in check search starts from here
           {
               // Increase reduction for cut nodes
               if (cutNode)
-                  r += 2 * ONE_PLY;
+              {
+                  if (newDepth == 2) {
+                      if (ss->killers[0] == MOVE_NONE && ss->killers[1] == MOVE_NONE    // Reduce if the node had zero killers.
+                        || type_of(moved_piece) == KING
+                        || ss->ply >= 2 && to_sq(move) == from_sq((ss - 2)->currentMove) && from_sq(move) == to_sq((ss - 2)->currentMove))  // Retreats
+                          r += 3 * ONE_PLY;  // All-but-assures that effort expended on king moves at the horizon will be minimized.
+                      else if (mp.getStage() == QUIET_INIT) // Basically: exend the first quiet move.
+                          r += ONE_PLY;
+                      else
+                          r += 2 * ONE_PLY;
+                  }
+                  else
+                      r += 2 * ONE_PLY;
+              }
 
               // Decrease reduction for moves that escape a capture. Filter out
               // castling moves, because they are coded as "king captures rook" and

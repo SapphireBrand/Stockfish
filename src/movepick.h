@@ -27,6 +27,15 @@
 #include "position.h"
 #include "types.h"
 
+enum Stages {
+    MAIN_SEARCH, CAPTURES_INIT, GOOD_CAPTURES, KILLERS, COUNTERMOVE, QUIET_INIT, QUIET, BAD_CAPTURES,
+    EVASION, EVASIONS_INIT, ALL_EVASIONS,
+    PROBCUT, PROBCUT_INIT, PROBCUT_CAPTURES,
+    QSEARCH_WITH_CHECKS, QCAPTURES_1_INIT, QCAPTURES_1, QCHECKS,
+    QSEARCH_NO_CHECKS, QCAPTURES_2_INIT, QCAPTURES_2,
+    QSEARCH_RECAPTURES, QRECAPTURES
+};
+
 
 /// HistoryStats records how often quiet moves have been successful or unsuccessful
 /// during the current search, and is used for reduction and move ordering decisions.
@@ -103,6 +112,10 @@ public:
   MovePicker(const Position&, Move, Depth, Search::Stack*);
 
   Move next_move(bool skipQuiets = false);
+  inline int getStage() const
+  {
+      return stage;
+  }
 
 private:
   template<GenType> void score();
