@@ -984,6 +984,8 @@ moves_loop: // When in check search starts from here
                        && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
                   r -= 2 * ONE_PLY;
 
+              auto lastHistory = (ss - 1)->history;
+
               ss->history =  cmh[moved_piece][to_sq(move)]
                            + fmh[moved_piece][to_sq(move)]
                            + fm2[moved_piece][to_sq(move)]
@@ -991,10 +993,10 @@ moves_loop: // When in check search starts from here
                            - 4000; // Correction factor
 
               // Decrease/increase reduction by comparing opponent's stat score
-              if (ss->history > 0 && (ss-1)->history < 0)
+              if (ss->history > 0 && lastHistory < 0)
                   r -= ONE_PLY;
 
-              else if (ss->history < 0 && (ss-1)->history > 0)
+              else if (ss->history < 0 && lastHistory > 0)
                   r += ONE_PLY;
 
               // Decrease/increase reduction for moves with a good/bad history
