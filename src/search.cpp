@@ -58,6 +58,27 @@ using std::string;
 using Eval::evaluate;
 using namespace Search;
 
+const int pvLoCutoff = 14;
+const int pvLoGoodCutoff = 182;
+const int pvLoBadNonCutoff = 107;
+const int pvLoBadNonGood = -42772;
+const int pvLoBadNonBad = -59695;
+const int pvLoBadEscCutoff = -6;
+const int pvLoBadEscBad = -18778;
+const int pvHiNonCutoff = 110;
+const int pvHiNonHiCutoff = 137;
+const int pvHiNonHilo = -39380;
+
+const int NonPvLoCutHistoryCutoff = 10;
+const int NonPvLoCutHistoryLo = 19801;
+const int NonPvLoCutHistoryHi = 40349;
+const int NonPvLoNonCutHistoryCutoff = 16;
+const int NonPvLoNonCutLoEscapeHistoryCutoff = 43;
+const int NonPvLoNonCutLoEscapeHi = -39534;
+const int NonPvLoNonCutLoEscapeLo = -59728;
+const int NonPvLoNonCutLoNonEscapeHistory = 119;
+const int NonPvLoNonCutLoNonEscapeThreshold = -20389;
+
 namespace {
 
   // Different node types, used as a template parameter
@@ -967,41 +988,102 @@ moves_loop: // When in check search starts from here
           &&  moveCount > 1
           && (!captureOrPromotion || moveCountPruning))
       {
-          Depth r = reduction<PvNode>(improving, depth, moveCount);
+          Depth d;
+          if (newDepth == 2) {
+              // There are only two possible search depths: ONE_PLY or 2 * ONE_PLY.
+              if (captureOrPromotion) // 42490 hits in bench
+                  // Search PV captures or good capture (moveCount <= 14) to full depth. Reduce non-PV bad captures.
+                  d = PvNode || moveCount <= 14 ? 2 * ONE_PLY : ONE_PLY;
+              else {
+                  auto lastHistory = (ss - 1)->history;
 
-          if (captureOrPromotion)
-              r -= r ? ONE_PLY : DEPTH_ZERO;
+                  ss->history = cmh[moved_piece][to_sq(move)]
+                      + fmh[moved_piece][to_sq(move)]
+                      + fm2[moved_piece][to_sq(move)]
+                      + thisThread->history.get(~pos.side_to_move(), move)
+                      - 4000; // Correction factor
+
+                  // The rest of the code deals with a lot of logic, but it always comes down to testing ss->history >= Constant.
+                  // The default below maps to ONE_PLY, so the logic below is responsible for determining conditions that should be 2 * ONE_PLy.
+                  auto historyCutoff = std::numeric_limits<decltype(ss->history)>::max();
+
+                  if (PvNode) { // 14508 hits in bench
+                      if (moveCount <= pvLoCutoff) {
+                          if (ss->history >= pvLoGoodCutoff) // 14051 hits in bench.
+                              historyCutoff = std::numeric_limits<decltype(ss->history)>::min(); // 3385 hits in bench
+                          else if (type_of(move) == NORMAL && !pos.see_ge(make_move(to_sq(move), from_sq(move)))) // 469 hits in bench
+                              historyCutoff = lastHistory > pvLoBadNonCutoff ? pvLoBadNonGood : pvLoBadNonBad;
+                          else if (lastHistory <= pvLoBadEscCutoff)
+                              historyCutoff = pvLoBadEscBad; // 9427 hits in bench
+                      }
+                      else if (ss->history < pvHiNonCutoff && lastHistory <= pvHiNonHiCutoff && type_of(move) == NORMAL && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
+                            historyCutoff = pvHiNonHilo;
+                  }
+                  else if (moveCount <= 2) { // 51542 hits in bench
+                      if (cutNode)
+                          historyCutoff = lastHistory < NonPvLoCutHistoryCutoff ? NonPvLoCutHistoryLo : NonPvLoCutHistoryHi;
+                      else if (ss->history >= NonPvLoNonCutHistoryCutoff)
+                          historyCutoff = std::numeric_limits<decltype(ss->history)>::min();
+                      else if (type_of(move) == NORMAL && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
+                          historyCutoff = lastHistory > NonPvLoNonCutLoEscapeHistoryCutoff ? NonPvLoNonCutLoEscapeHi : NonPvLoNonCutLoEscapeLo;
+                      else if (lastHistory <= NonPvLoNonCutLoNonEscapeHistory)
+                          historyCutoff = NonPvLoNonCutLoNonEscapeThreshold;
+                  }
+                  else if (moveCount <= 14) { // 207837 hits in bench
+                      if (cutNode)
+                          historyCutoff = lastHistory < 0 ? 40000 : 60000;
+                      else if (type_of(move) == NORMAL && !pos.see_ge(make_move(to_sq(move), from_sq(move)))) {
+                          if (ss->history >= 0)
+                              historyCutoff = std::numeric_limits<decltype(ss->history)>::min();
+                          else
+                              historyCutoff = lastHistory > 0 ? -20000 : -40000;
+                      }
+                      else if (ss->history > 0)
+                          historyCutoff = lastHistory < 0 ? std::numeric_limits<decltype(ss->history)>::min() : 20000;
+                  }
+                  else if (improving && !cutNode && lastHistory <= 0 && ss->history < 0 && type_of(move) == NORMAL && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
+                      historyCutoff = -20000;
+                  d = ss->history > historyCutoff ? 2 * ONE_PLY : ONE_PLY;
+              }
+          }
           else
           {
-              // Increase reduction for cut nodes
-              if (cutNode)
-                  r += 2 * ONE_PLY;
+              Depth r = reduction<PvNode>(improving, depth, moveCount);
 
-              // Decrease reduction for moves that escape a capture. Filter out
-              // castling moves, because they are coded as "king captures rook" and
-              // hence break make_move().
-              else if (    type_of(move) == NORMAL
-                       && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
-                  r -= 2 * ONE_PLY;
+              if (captureOrPromotion)
+                  r -= r ? ONE_PLY : DEPTH_ZERO;
+              else
+              {
+                  // Increase reduction for cut nodes
+                  if (cutNode)
+                      r += 2 * ONE_PLY;
 
-              ss->history =  cmh[moved_piece][to_sq(move)]
-                           + fmh[moved_piece][to_sq(move)]
-                           + fm2[moved_piece][to_sq(move)]
-                           + thisThread->history.get(~pos.side_to_move(), move)
-                           - 4000; // Correction factor
+                  // Decrease reduction for moves that escape a capture. Filter out
+                  // castling moves, because they are coded as "king captures rook" and
+                  // hence break make_move().
+                  else if (type_of(move) == NORMAL
+                      && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
+                      r -= 2 * ONE_PLY;
 
-              // Decrease/increase reduction by comparing opponent's stat score
-              if (ss->history > 0 && (ss-1)->history < 0)
-                  r -= ONE_PLY;
+                  ss->history = cmh[moved_piece][to_sq(move)]
+                      + fmh[moved_piece][to_sq(move)]
+                      + fm2[moved_piece][to_sq(move)]
+                      + thisThread->history.get(~pos.side_to_move(), move)
+                      - 4000; // Correction factor
 
-              else if (ss->history < 0 && (ss-1)->history > 0)
-                  r += ONE_PLY;
+                              // Decrease/increase reduction by comparing opponent's stat score
+                  if (ss->history > 0 && (ss - 1)->history < 0)
+                      r -= ONE_PLY;
 
-              // Decrease/increase reduction for moves with a good/bad history
-              r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->history / 20000) * ONE_PLY);
+                  else if (ss->history < 0 && (ss - 1)->history > 0)
+                      r += ONE_PLY;
+
+                  // Decrease/increase reduction for moves with a good/bad history
+                  r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->history / 20000) * ONE_PLY);
+              }
+
+              d = std::max(newDepth - r, ONE_PLY);
           }
-
-          Depth d = std::max(newDepth - r, ONE_PLY);
 
           value = -search<NonPV>(pos, ss+1, -(alpha+1), -alpha, d, true, false);
 
