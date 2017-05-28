@@ -36,6 +36,13 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "tune.h"
+
+const int LMRDepth2MC2Weight = 982;
+int LMRDepth2History5000Weight = 1000;
+
+TUNE(LMRDepth2History5000Weight);
+
 
 namespace Search {
 
@@ -967,42 +974,54 @@ moves_loop: // When in check search starts from here
           &&  moveCount > 1
           && (!captureOrPromotion || moveCountPruning))
       {
-          Depth r = reduction<PvNode>(improving, depth, moveCount);
+          Depth d;
+              if (newDepth == 2)
+                  d = LMRDepth2MC2Weight * (moveCount < 3)
+                      + LMRDepth2History5000Weight * (ss->history > -5000)
+                      + 1000 * (type_of(move) == NORMAL && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
+                      + 1000 * PvNode
+                      - 1000 * cutNode
+                      >= 2000
+                  ? 2 * ONE_PLY
+                  : ONE_PLY;
+              else
+              {
+                  Depth r = reduction<PvNode>(improving, depth, moveCount);
 
-          if (captureOrPromotion)
-              r -= r ? ONE_PLY : DEPTH_ZERO;
-          else
-          {
-              // Increase reduction for cut nodes
-              if (cutNode)
-                  r += 2 * ONE_PLY;
+                  if (captureOrPromotion)
+                      r -= r ? ONE_PLY : DEPTH_ZERO;
+                  else
+                  {
+                      // Increase reduction for cut nodes
+                      if (cutNode)
+                          r += 2 * ONE_PLY;
 
-              // Decrease reduction for moves that escape a capture. Filter out
-              // castling moves, because they are coded as "king captures rook" and
-              // hence break make_move().
-              else if (    type_of(move) == NORMAL
-                       && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
-                  r -= 2 * ONE_PLY;
+                      // Decrease reduction for moves that escape a capture. Filter out
+                      // castling moves, because they are coded as "king captures rook" and
+                      // hence break make_move().
+                      else if (type_of(move) == NORMAL
+                          && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
+                          r -= 2 * ONE_PLY;
 
-              ss->history =  cmh[moved_piece][to_sq(move)]
-                           + fmh[moved_piece][to_sq(move)]
-                           + fm2[moved_piece][to_sq(move)]
-                           + thisThread->history.get(~pos.side_to_move(), move)
-                           - 4000; // Correction factor
+                      ss->history = cmh[moved_piece][to_sq(move)]
+                          + fmh[moved_piece][to_sq(move)]
+                          + fm2[moved_piece][to_sq(move)]
+                          + thisThread->history.get(~pos.side_to_move(), move)
+                          - 4000; // Correction factor
 
-              // Decrease/increase reduction by comparing opponent's stat score
-              if (ss->history > 0 && (ss-1)->history < 0)
-                  r -= ONE_PLY;
+                      // Decrease/increase reduction by comparing opponent's stat score
+                      if (ss->history > 0 && (ss - 1)->history < 0)
+                          r -= ONE_PLY;
 
-              else if (ss->history < 0 && (ss-1)->history > 0)
-                  r += ONE_PLY;
+                      else if (ss->history < 0 && (ss - 1)->history > 0)
+                          r += ONE_PLY;
 
-              // Decrease/increase reduction for moves with a good/bad history
-              r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->history / 20000) * ONE_PLY);
-          }
+                      // Decrease/increase reduction for moves with a good/bad history
+                      r = std::max(DEPTH_ZERO, (r / ONE_PLY - ss->history / 20000) * ONE_PLY);
+                  }
 
-          Depth d = std::max(newDepth - r, ONE_PLY);
-
+                  d = std::max(newDepth - r, ONE_PLY);
+              }
           value = -search<NonPV>(pos, ss+1, -(alpha+1), -alpha, d, true, false);
 
           doFullDepthSearch = (value > alpha && d != newDepth);
