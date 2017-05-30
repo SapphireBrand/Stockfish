@@ -46,6 +46,9 @@ struct Stack {
   Value staticEval;
   int history;
   int moveCount;
+  Depth newDepth;
+  uint8_t forcedMove;
+  uint8_t forcingTree;
 };
 
 

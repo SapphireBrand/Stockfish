@@ -552,7 +552,7 @@ namespace {
     bool ttHit, inCheck, givesCheck, singularExtensionNode, improving;
     bool captureOrPromotion, doFullDepthSearch, moveCountPruning, skipQuiets;
     Piece moved_piece;
-    int moveCount, quietCount;
+    int moveCount, quietCount, nullThreatExtension = 0;
 
     // Step 1. Initialize node
     Thread* thisThread = pos.this_thread();
@@ -561,6 +561,15 @@ namespace {
     ss->history = 0;
     bestValue = -VALUE_INFINITE;
     ss->ply = (ss-1)->ply + 1;
+    ss->forcedMove = 0;
+
+    // This node is in the forcing move tree if it is a move at the root other than the first move (offensive
+    // forcing move tree) or a reply to the first move (defensive forcing move tree) or if the grandparent was
+    // in the forcing move tree and the opponent's last move was forced (recursive).
+    // TODO: Maybe sentinel the root nodes so that the recursive case handles the root cases.
+    ss->forcingTree = (ss - 2)->forcingTree && (ss - 2)->forcedMove // Recursive forcing tree.
+        || ss->ply == 2 && (ss - 1)->moveCount > 1          // Offensive forcing tree
+        || ss->ply == 3 && (ss - 2)->moveCount == 1;     // Defensive forcing tree
 
     // Check for the available remaining time
     if (thisThread->resetCalls.load(std::memory_order_relaxed))
@@ -773,6 +782,14 @@ namespace {
             if (v >= beta)
                 return nullValue;
         }
+        else if (depth < 7 && ss->forcingTree && (ss - 1)->newDepth - depth > 1)
+        {
+            // The opponent can force his way to this node, and he last played a move that was reduced by LMR by more
+            // than one ply. Now we did a null search, and it failed low. So the opponent is threatening to win.
+            //
+            // We do not extend searches that are already deep, because that is probably not beneficial.
+            nullThreatExtension = 1;
+        }
     }
 
     // Step 9. ProbCut (skipped when in check)
@@ -881,7 +898,7 @@ moves_loop: // When in check search starts from here
       // is singular and should be extended. To verify this we do a reduced search
       // on all the other moves but the ttMove and if the result is lower than
       // ttValue minus a margin then we will extend the ttMove.
-      if (    singularExtensionNode
+      if (singularExtensionNode
           &&  move == ttMove
           &&  pos.legal(move))
       {
@@ -894,9 +911,11 @@ moves_loop: // When in check search starts from here
           if (value < rBeta)
               extension = ONE_PLY;
       }
-      else if (    givesCheck
-               && !moveCountPruning
-               &&  pos.see_ge(move))
+      else if (givesCheck
+          && !moveCountPruning
+          &&  pos.see_ge(move))
+          extension = ONE_PLY;
+      else if (nullThreatExtension)
           extension = ONE_PLY;
 
       // Calculate new depth for this move
@@ -957,6 +976,9 @@ moves_loop: // When in check search starts from here
       // Update the current move (this must be done after singular extension search)
       ss->currentMove = move;
       ss->counterMoves = &thisThread->counterMoveHistory[moved_piece][to_sq(move)];
+      // Forced moves are extensions, escapes from check, or captures that re-establish material value > alpha
+      ss->forcedMove = extension || inCheck || captureOrPromotion && -(ss - 1)->staticEval < alpha - PawnValueEg / 2 && ss->staticEval > alpha - PawnValueEg / 2;
+      ss->newDepth = newDepth;
 
       // Step 14. Make the move
       pos.do_move(move, st, givesCheck);
