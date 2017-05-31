@@ -899,6 +899,10 @@ moves_loop: // When in check search starts from here
                && !moveCountPruning
                &&  pos.see_ge(move))
           extension = ONE_PLY;
+      else if (ttMove == MOVE_NONE && captureOrPromotion && !inCheck && (ss-1)->captureOrPromotion && to_sq(move) == to_sq((ss-1)->currentMove) && ss->staticEval > alpha && -(ss-1)->staticEval < alpha - PawnValueEg / 2 && pos.see_ge(move))
+          // Extend recaptures when they seem forced and there is no TT move. We do not extend check-evasion because giving check
+          // is subject to extension and we do not want to extend twice.
+          extension = ONE_PLY;
 
       // Calculate new depth for this move
       newDepth = depth - ONE_PLY + extension;
@@ -957,6 +961,7 @@ moves_loop: // When in check search starts from here
 
       // Update the current move (this must be done after singular extension search)
       ss->currentMove = move;
+      ss->captureOrPromotion = captureOrPromotion;
       ss->history = &thisThread->counterMoveHistory[moved_piece][to_sq(move)];
 
       // Step 14. Make the move
