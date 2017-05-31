@@ -843,6 +843,7 @@ moves_loop: // When in check search starts from here
                            &&  tte->depth() >= depth - 3 * ONE_PLY;
     skipQuiets = false;
     ttCapture = false;
+    auto seenSingular = false;
 
     // Step 11. Loop through moves
     // Loop through all pseudo-legal moves until no moves remain or a beta cutoff occurs
@@ -888,7 +889,30 @@ moves_loop: // When in check search starts from here
       // is singular and should be extended. To verify this we do a reduced search
       // on all the other moves but the ttMove and if the result is lower than
       // ttValue minus a margin then we will extend the ttMove.
-      if (    singularExtensionNode
+
+      // Exceptions for check are indirectly covered in LMR, so questions arise about whether it is necessary here.
+      // Extensive discussion on TalkChess
+      // Moving check extension ahead of singular is a win but not by enough (Total: 42124 W: 7708 L: 7653 D: 26763) so additional research starts with this change.
+      //
+      // && (ParamCheckExtensionDepth * depth - ParamCheckExtensionNonPawnMaterial * pos.non_pawn_material() <= ParamCheckExtensionLimit)   Total: 12632 W: 2280 L: 2351 D: 8001 (ParamCheckExtensionDepth = 1461948, ParamCheckExtensionNonPawnMaterial = 1003, ParamCheckExtensionLimit = 7664500;
+      // && depth < 12 Total: 33436 W: 6131 L: 6113 D: 21192
+      // && depth < 11 Total: 19167 W: 3488 L: 3531 D: 12148
+      // && depth < 10 Total: 29301 W: 5370 L: 5121 D: 18810 Total: 85211 W: 11248 L: 11087 D: 62876
+      // && depth <  9 Total: 10338 W: 1817 L: 1898 D: 6623
+      // && depth <  8 Total: 16263 W: 2936 L: 2992 D: 10335
+      // && (inCheck || ss->staticEval < alpha + KnightValueMg / 2)  Total: 18561 W: 3311 L: 3357 D: 11893
+      // && (depth < 5 || pos.non_pawn_material() > 2 * QueenValueMg) Total: 15420 W: 2796 L: 2855 D: 9769
+      // && (move == ttMove || depth < 10) Total: 5883 W: 989 L: 1089 D: 3805
+      // && (PvNode || depth < 10): Total: 21069 W: 3736 L: 3772 D: 13561
+      // && (PvNode || !moveCountPruning) Total: 19321 W: 3368 L: 3412 D: 12541
+      // && (PvNode || move == ttMove || inCheck || captureOrPromotion || depth < 10): Total: 38267 W: 6865 L: 6828 D: 24574
+      // && (PvNode || move == ttMove || inCheck || captureOrPromotion || depth < 10) && !seenSingular: Total: 10433 W: 1822 L: 1903 D: 6708
+      if (givesCheck
+          && !moveCountPruning
+          && !seenSingular
+          &&  pos.see_ge(move))
+          extension = ONE_PLY;
+      else if (singularExtensionNode
           &&  move == ttMove
           &&  pos.legal(move))
       {
@@ -899,12 +923,11 @@ moves_loop: // When in check search starts from here
           ss->excludedMove = MOVE_NONE;
 
           if (value < rBeta)
+          {
+              seenSingular = true;
               extension = ONE_PLY;
+          }
       }
-      else if (    givesCheck
-               && !moveCountPruning
-               &&  pos.see_ge(move))
-          extension = ONE_PLY;
 
       // Calculate new depth for this move
       newDepth = depth - ONE_PLY + extension;
