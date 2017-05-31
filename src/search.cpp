@@ -36,6 +36,13 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "tune.h"
+
+int ParamCheckExtensionDepth = 1457300;
+int ParamCheckExtensionNonPawnMaterial = 1000;
+int ParamCheckExtensionLimit = 7664500;
+
+TUNE(ParamCheckExtensionDepth, ParamCheckExtensionNonPawnMaterial);
 
 namespace Search {
 
@@ -882,7 +889,12 @@ moves_loop: // When in check search starts from here
       // is singular and should be extended. To verify this we do a reduced search
       // on all the other moves but the ttMove and if the result is lower than
       // ttValue minus a margin then we will extend the ttMove.
-      if (    singularExtensionNode
+      if (givesCheck
+          && !moveCountPruning
+          && (ParamCheckExtensionDepth * depth - ParamCheckExtensionNonPawnMaterial * pos.non_pawn_material() <= ParamCheckExtensionLimit)
+          &&  pos.see_ge(move))
+          extension = ONE_PLY;
+      else if (singularExtensionNode
           &&  move == ttMove
           &&  pos.legal(move))
       {
@@ -895,10 +907,6 @@ moves_loop: // When in check search starts from here
           if (value < rBeta)
               extension = ONE_PLY;
       }
-      else if (    givesCheck
-               && !moveCountPruning
-               &&  pos.see_ge(move))
-          extension = ONE_PLY;
 
       // Calculate new depth for this move
       newDepth = depth - ONE_PLY + extension;
