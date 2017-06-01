@@ -705,6 +705,9 @@ namespace {
     }
     else
     {
+        // MOVE_NULL is not possible if inCheck
+        assert((ss - 1)->currentMove != MOVE_NULL || (ss - 1)->staticEval != VALUE_NONE);   
+
         eval = ss->staticEval =
         (ss-1)->currentMove != MOVE_NULL ? evaluate(pos)
                                          : -(ss-1)->staticEval + 2 * Eval::Tempo;
@@ -819,15 +822,28 @@ namespace {
 
 moves_loop: // When in check search starts from here
 
+    assert(inCheck == (ss->staticEval == VALUE_NONE));
+
     const PieceToHistory& cmh = *(ss-1)->history;
     const PieceToHistory& fmh = *(ss-2)->history;
     const PieceToHistory& fm2 = *(ss-4)->history;
 
     MovePicker mp(pos, ttMove, depth, ss);
     value = bestValue; // Workaround a bogus 'uninitialized' warning under gcc
-    improving =   ss->staticEval >= (ss-2)->staticEval
-            /* || ss->staticEval == VALUE_NONE Already implicit in the previous condition */
-               ||(ss-2)->staticEval == VALUE_NONE;
+
+    // improving is used as a trigger for searching deeper/broader, so we regard being
+    // inCheck as "improving". inCheck means that ss->staticEval is set to VALUE_NONE, which
+    // will exceed (ss-2)->staticEval. (Though it seems artificial. Possibly worth separating.)
+    // Otherwise, improving is set based on the most recent position that was not inCheck.
+    improving = false;
+    auto ssPtr = ss;
+    do {
+        ssPtr -= 2;
+        if (ss->staticEval >= ssPtr->staticEval) {
+            improving = true;
+            break;
+        }
+    } while (ssPtr->staticEval == VALUE_NONE && ssPtr->ply > 0);
 
     singularExtensionNode =   !rootNode
                            &&  depth >= 8 * ONE_PLY
