@@ -63,6 +63,8 @@ namespace {
   // Different node types, used as a template parameter
   enum NodeType { NonPV, PV };
 
+  enum SituationalUrgency { SituationNormal = 0, SituationInCheck = 1, SituationLastInCheck = 2, SituationImproving = 3, };
+
   // Sizes and phases of the skip-blocks, used for distributing search depths across the threads
   const int skipSize[]  = { 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4 };
   const int skipPhase[] = { 0, 1, 0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6, 7 };
@@ -73,14 +75,14 @@ namespace {
   Value futility_margin(Depth d) { return Value(150 * d / ONE_PLY); }
 
   // Futility and reductions lookup tables, initialized at startup
-  int FutilityMoveCounts[2][16]; // [improving][depth]
-  int Reductions[2][2][64][64];  // [pv][improving][depth][moveNumber]
+  int FutilityMoveCounts[4][16]; // [situationalUrgency][depth]
+  int Reductions[2][4][64][64];  // [pv][situationalUrgency][depth][moveNumber]
 
   // Threshold used for countermoves based pruning
   const int CounterMovePruneThreshold = 0;
 
-  template <bool PvNode> Depth reduction(bool i, Depth d, int mn) {
-    return Reductions[PvNode][i][std::min(d / ONE_PLY, 63)][std::min(mn, 63)] * ONE_PLY;
+  template <bool PvNode> Depth reduction(SituationalUrgency su, Depth d, int mn) {
+    return Reductions[PvNode][su][std::min(d / ONE_PLY, 63)][std::min(mn, 63)] * ONE_PLY;
   }
 
   // History and stats update bonus, based on depth
@@ -163,24 +165,26 @@ namespace {
 
 void Search::init() {
 
-  for (int imp = 0; imp <= 1; ++imp)
+  for (int su = SituationNormal; su <= SituationImproving; ++su)
       for (int d = 1; d < 64; ++d)
           for (int mc = 1; mc < 64; ++mc)
           {
               double r = log(d) * log(mc) / 1.95;
 
-              Reductions[NonPV][imp][d][mc] = int(std::round(r));
-              Reductions[PV][imp][d][mc] = std::max(Reductions[NonPV][imp][d][mc] - 1, 0);
+              Reductions[NonPV][su][d][mc] = int(std::round(r));
+              Reductions[PV][su][d][mc] = std::max(Reductions[NonPV][su][d][mc] - 1, 0);
 
-              // Increase reduction for non-PV nodes when eval is not improving
-              if (!imp && Reductions[NonPV][imp][d][mc] >= 2)
-                Reductions[NonPV][imp][d][mc]++;
+              // Increase reduction for non-PV nodes if not high situationalUrgency
+              if (su == SituationNormal && Reductions[NonPV][su][d][mc] >= 2)
+                Reductions[NonPV][su][d][mc]++;
           }
 
   for (int d = 0; d < 16; ++d)
   {
-      FutilityMoveCounts[0][d] = int(2.4 + 0.74 * pow(d, 1.78));
-      FutilityMoveCounts[1][d] = int(5.0 + 1.00 * pow(d, 2.00));
+      FutilityMoveCounts[SituationNormal][d] = int(2.4 + 0.74 * pow(d, 1.78));
+      FutilityMoveCounts[SituationInCheck][d] =
+      FutilityMoveCounts[SituationLastInCheck][d] =
+      FutilityMoveCounts[SituationImproving][d] = int(5.0 + 1.00 * pow(d, 2.00));
   }
 }
 
@@ -550,10 +554,11 @@ namespace {
     Move ttMove, move, excludedMove, bestMove;
     Depth extension, newDepth;
     Value bestValue, value, ttValue, eval;
-    bool ttHit, inCheck, givesCheck, singularExtensionNode, improving;
+    bool ttHit, inCheck, givesCheck, singularExtensionNode;
     bool captureOrPromotion, doFullDepthSearch, moveCountPruning, skipQuiets;
     Piece moved_piece;
     int moveCount, quietCount;
+    SituationalUrgency situationalUrgency;
 
     // Step 1. Initialize node
     Thread* thisThread = pos.this_thread();
@@ -825,9 +830,16 @@ moves_loop: // When in check search starts from here
 
     MovePicker mp(pos, ttMove, depth, ss);
     value = bestValue; // Workaround a bogus 'uninitialized' warning under gcc
-    improving =   ss->staticEval >= (ss-2)->staticEval
-            /* || ss->staticEval == VALUE_NONE Already implicit in the previous condition */
-               ||(ss-2)->staticEval == VALUE_NONE;
+
+    // Code below defines "situationalUrgency" as improving eval, or in check this turn or last.
+    if (inCheck)
+        situationalUrgency = SituationInCheck;
+    else if ((ss - 2)->staticEval == VALUE_NONE)
+        situationalUrgency = SituationLastInCheck;
+    else if (ss->staticEval >= (ss - 2)->staticEval)
+        situationalUrgency = SituationImproving;
+    else
+        situationalUrgency = SituationNormal;
 
     singularExtensionNode =   !rootNode
                            &&  depth >= 8 * ONE_PLY
@@ -873,7 +885,7 @@ moves_loop: // When in check search starts from here
                   : pos.gives_check(move);
 
       moveCountPruning =   depth < 16 * ONE_PLY
-                        && moveCount >= FutilityMoveCounts[improving][depth / ONE_PLY];
+                        && moveCount >= FutilityMoveCounts[situationalUrgency][depth / ONE_PLY];
 
       // Step 12. Singular and Gives Check Extensions
 
@@ -920,7 +932,7 @@ moves_loop: // When in check search starts from here
               }
 
               // Reduced depth of the next LMR search
-              int lmrDepth = std::max(newDepth - reduction<PvNode>(improving, depth, moveCount), DEPTH_ZERO) / ONE_PLY;
+              int lmrDepth = std::max(newDepth - reduction<PvNode>(situationalUrgency, depth, moveCount), DEPTH_ZERO) / ONE_PLY;
 
               // Countermoves based pruning
               if (   lmrDepth < 3
@@ -968,7 +980,7 @@ moves_loop: // When in check search starts from here
           &&  moveCount > 1
           && (!captureOrPromotion || moveCountPruning))
       {
-          Depth r = reduction<PvNode>(improving, depth, moveCount);
+          Depth r = reduction<PvNode>(situationalUrgency, depth, moveCount);
 
           if (captureOrPromotion)
               r -= r ? ONE_PLY : DEPTH_ZERO;
