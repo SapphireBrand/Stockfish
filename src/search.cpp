@@ -36,6 +36,7 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "tune.h"
 
 namespace Search {
 
@@ -57,6 +58,7 @@ namespace TB = Tablebases;
 using std::string;
 using Eval::evaluate;
 using namespace Search;
+
 
 namespace {
 
@@ -158,12 +160,22 @@ namespace {
 
 } // namespace
 
+int ShallowPruneSeeDelta[] = {35, 105, 175, 245, 315, 385, 455};
+Value ShallowPruneSee[8];
+
+TUNE(ShallowPruneSeeDelta, Search::init);
 
 /// Search::init() is called during startup to initialize various lookup tables
 
 void Search::init() {
-
-  for (int imp = 0; imp <= 1; ++imp)
+    // The ShallowPruneSee constants are represented as deltas so that tuning will constrain the cutoffs
+    // to be a monotonic sequence. Current implementation constrains ShallowPruneSee[0] == 0, on the rationale
+    // that the policy "must" search safe moves.
+    ShallowPruneSee[0] = Value(0);
+    for (int i = 1; i < sizeof(ShallowPruneSee) / sizeof(ShallowPruneSee[0]); i++)
+        ShallowPruneSee[i] = ShallowPruneSee[i - 1] - Value(ShallowPruneSeeDelta[i - 1]);
+    
+    for (int imp = 0; imp <= 1; ++imp)
       for (int d = 1; d < 64; ++d)
           for (int mc = 1; mc < 64; ++mc)
           {
@@ -935,8 +947,8 @@ moves_loop: // When in check search starts from here
                   continue;
 
               // Prune moves with negative SEE
-              if (   lmrDepth < 8
-                  && !pos.see_ge(move, Value(-35 * lmrDepth * lmrDepth)))
+              if (   lmrDepth < sizeof(ShallowPruneSee) / sizeof(ShallowPruneSee[0])
+                  && !pos.see_ge(move, ShallowPruneSee[lmrDepth]))
                   continue;
           }
           else if (    depth < 7 * ONE_PLY
