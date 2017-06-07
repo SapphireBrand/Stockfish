@@ -837,6 +837,7 @@ moves_loop: // When in check search starts from here
                            && (tte->bound() & BOUND_LOWER)
                            &&  tte->depth() >= depth - 3 * ONE_PLY;
     skipQuiets = false;
+    bool isSingular = false;
 
     // Step 11. Loop through moves
     // Loop through all pseudo-legal moves until no moves remain or a beta cutoff occurs
@@ -893,7 +894,10 @@ moves_loop: // When in check search starts from here
           ss->excludedMove = MOVE_NONE;
 
           if (value < rBeta)
+          {
               extension = ONE_PLY;
+              isSingular = true;
+          }
       }
       else if (    givesCheck
                && !moveCountPruning
@@ -984,6 +988,10 @@ moves_loop: // When in check search starts from here
               else if (    type_of(move) == NORMAL
                        && !pos.see_ge(make_move(to_sq(move), from_sq(move))))
                   r -= 2 * ONE_PLY;
+              else if (!PvNode && isSingular)
+                  // If this node is singular, then all other moves have already been searched to reduced depth and found
+                  // lacking by a sizeable margin. So reduce by an extra ply.
+                  r += ONE_PLY;
 
               ss->statScore =  cmh[moved_piece][to_sq(move)]
                              + fmh[moved_piece][to_sq(move)]
