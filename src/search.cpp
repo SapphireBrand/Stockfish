@@ -70,7 +70,20 @@ namespace {
   // Razoring and futility margin based on depth
   // razor_margin[0] is unused as long as depth >= ONE_PLY in search
   const int razor_margin[] = { 0, 570, 603, 554 };
-  Value futility_margin(Depth d) { return Value(150 * d / ONE_PLY); }
+
+  // FutilityConstant = -40, FutilityMaterialSlope = -27, FutilityDepthSlope = 102 Total: 41685 W: 7569 L: 7517 D: 26599
+  // FutilityConstant = -36, FutilityMaterialSlope = 0, FutilityDepthSlope = 139 STC: 27313 W: 5036 L: 4787 D: 17490, LTC: 74082 W: 9623 L: 9578 D: 54881
+  // Value((FutilityDepthSlope + (FutilityMaterialEffectOnSlope * (int)nonPawnMaterial) / 4096) * d / ONE_PLY + FutilityConstant: The tuned value of FutilityMaterialEffectOnSlope was 0.11, so basically no effect.
+  // Allow futility pruning at depth 7: Total: 13479 W: 2407 L: 2475 D: 8597
+  // Disallow futility pruning at depth 6: failed STC, but not by much. Basically, pruning at depth 6 is of marginal value.
+  // !PvNode &&  depth < 6 * ONE_PLY (rather than !rootNode && depth < 7 * ONE_PLY): Total: 44156 W: 7947 L: 7885 D: 28324
+  // !PvNode &&  depth < 7 * ONE_PLY (rather than !rootNode && depth < 7 * ONE_PLY): Total: 21858 W: 3888 L: 3921 D: 14049
+  // FutilityDepthSlope = 135; FutilityConstant = -37; FutilityPvSlope = 1; FutilityPvConstant = 0; STC: 42264 W: 7681 L: 7378 D: 27205, LTC: 14243 W: 1810 L: 1882 D: 10551
+  int FutilityDepthSlope = 135;
+  int FutilityConstant = -38;
+  int FutilityPvSlope = 15;
+  int FutilityPvConstant = 38;
+  inline Value futility_margin(Depth d, int pvNode) { return Value((FutilityDepthSlope + FutilityPvSlope * (int)pvNode) * d / ONE_PLY + FutilityConstant + FutilityPvConstant * (int)pvNode); }
 
   // Futility and reductions lookup tables, initialized at startup
   int FutilityMoveCounts[2][16]; // [improving][depth]
@@ -717,7 +730,7 @@ namespace {
     // Step 7. Futility pruning: child node (skipped when in check)
     if (   !rootNode
         &&  depth < 7 * ONE_PLY
-        &&  eval - futility_margin(depth) >= beta
+        &&  eval - futility_margin(depth, PvNode) >= beta
         &&  eval < VALUE_KNOWN_WIN  // Do not return unproven wins
         &&  pos.non_pawn_material(pos.side_to_move()))
         return eval;
