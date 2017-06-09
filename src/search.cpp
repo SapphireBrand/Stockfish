@@ -36,6 +36,13 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "tune.h"
+
+int ProbCutConstant = 160;
+int ProbCutMaterialScale = 200;
+
+TUNE(ProbCutConstant);
+TUNE(ProbCutMaterialScale);
 
 namespace Search {
 
@@ -783,7 +790,7 @@ namespace {
         &&  depth >= 5 * ONE_PLY
         &&  abs(beta) < VALUE_MATE_IN_MAX_PLY)
     {
-        Value rbeta = std::min(beta + 200, VALUE_INFINITE);
+        Value rbeta = std::min(beta + ProbCutConstant + pos.non_pawn_material(~pos.side_to_move()) / ProbCutMaterialScale, VALUE_INFINITE);
         Depth rdepth = depth - 4 * ONE_PLY;
 
         assert(rdepth >= ONE_PLY);
