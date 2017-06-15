@@ -36,6 +36,7 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "tune.h"
 
 namespace Search {
 
@@ -59,6 +60,19 @@ using Eval::evaluate;
 using namespace Search;
 
 namespace {
+
+  // AspirationInitialConstant = 17 failed STC: Total: 30665 W: 5517 L: 5569 D: 19579
+  // AspirationInitialConstant = 19 failed STC: Total: 17522 W: 3210 L: 3260 D: 11052
+  int AspirationInitialConstant = 1500;
+  int AspirationInitialLogDepth = 100;
+  int AspirationInitialResearches = 100;
+  int AspirationInitialMaterial = 100;
+  const int AspirationWindowMultiplier = 50;
+  const int AspirationWindowConstant = 200;
+  TUNE(SetRange(1300, 2000), AspirationInitialConstant);
+  TUNE(AspirationInitialLogDepth);
+  TUNE(AspirationInitialResearches);
+  TUNE(AspirationInitialMaterial);
 
   // Different node types, used as a template parameter
   enum NodeType { NonPV, PV };
@@ -360,6 +374,8 @@ void Thread::search() {
 
   multiPV = std::min(multiPV, rootMoves.size());
 
+  int researches = 0;
+
   // Iterative deepening loop until requested to stop or the target depth is reached
   while (   (rootDepth += ONE_PLY) < DEPTH_MAX
          && !Signals.stop
@@ -382,13 +398,23 @@ void Thread::search() {
       for (RootMove& rm : rootMoves)
           rm.previousScore = rm.score;
 
+      int researchesLastRootDepth = researches;
+      researches = 0;
+
       // MultiPV loop. We perform a full root search for each PV line
       for (PVIdx = 0; PVIdx < multiPV && !Signals.stop; ++PVIdx)
       {
           // Reset aspiration window starting size
           if (rootDepth >= 5 * ONE_PLY)
           {
-              delta = Value(18);
+              // The initial aspiration window is wider if there is a lot of material or if there is
+              // evidence of search instability from many researches. The window is gently
+              // narrower at higher depths.
+              delta = Value(int((AspirationInitialConstant
+                  + AspirationInitialMaterial * (double)rootPos.non_pawn_material()/16384.0
+                  + AspirationInitialResearches * researchesLastRootDepth
+                  - AspirationInitialLogDepth * log((double)rootDepth)) / 100.0));
+
               alpha = std::max(rootMoves[PVIdx].previousScore - delta,-VALUE_INFINITE);
               beta  = std::min(rootMoves[PVIdx].previousScore + delta, VALUE_INFINITE);
           }
@@ -422,8 +448,8 @@ void Thread::search() {
                   && Time.elapsed() > 3000)
                   sync_cout << UCI::pv(rootPos, rootDepth, alpha, beta) << sync_endl;
 
-              // In case of failing low/high increase aspiration window and
-              // re-search, otherwise exit the loop.
+              // In case of failing low/high re-search with lower/higher bounds, and then increase aspiration window
+              // Otherwise exit the loop.
               if (bestValue <= alpha)
               {
                   beta = (alpha + beta) / 2;
@@ -443,7 +469,9 @@ void Thread::search() {
               else
                   break;
 
-              delta += delta / 4 + 5;
+              delta = (AspirationWindowMultiplier * delta + AspirationWindowConstant) / 40;
+
+              if (PVIdx == 0) researches++;
 
               assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
           }
