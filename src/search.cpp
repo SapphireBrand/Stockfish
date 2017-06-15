@@ -59,6 +59,25 @@ using Eval::evaluate;
 using namespace Search;
 
 namespace {
+    // Use beta = (alpha + 2 * beta) / 3 on a fail-low (symmetric fail high): Total: 22577 W: 4029 L: 4059 D: 14489
+    // Use beta = (2 * alpha + beta) / 3 on a fail-low (symmetric fail high): Total: 7141 W: 1237 L: 1332 
+    // AspirationInitialConstant = 17 failed STC: Total: 30665 W: 5517 L: 5569 D: 19579
+    // AspirationInitialConstant = 19 failed STC: Total: 17522 W: 3210 L: 3260 D: 11052
+    // The number of researches from the previous iteration seemed beneficial in a test by pb that passed STC but failed LTC. Weight too high, IMO. Try weight < 2
+    // Post on TalkChess showed that window should be narrower for deeper searches.
+    // I recall that window should be narrower for less material. (This is connected to deeper searches, of course.)
+    // Tuning really didn't move these parameters much: Total: 23203 W: 4162 L: 4103 D: 14938, so yellow STC
+    // AspirationWindowMultiplier = 49 AspirationWindowConstant = 200 was a yellow STC: Total: 32843 W: 5903 L: 5889 D: 21051
+    // AspirationWindowMultiplier = 48 AspirationWindowConstant = 200 failed STC: Total: 18621 W: 3303 L: 3349 D: 11969
+    // AspirationWindowMultiplier = 51 AspirationWindowConstant = 200 failed STC: Total: 5561 W: 919 L: 1020 D: 3622
+    // AspirationWindowMultiplier = 49 AspirationWindowConstant = 190 Total: 19739 W: 3495 L: 3537 D: 12707
+    // AspirationWindowMultiplier = 49 AspirationWindowConstant = 205 Total: 17243 W: 3045 L: 3097 D: 11101
+    // AspirationInitialConstant = 16 AspirationWindowMultiplier = 49 AspirationWindowConstant = 200 AspirationResearchWeight = 1 Total: 34764 W: 6229 L: 6207 D: 22328
+    const int AspirationInitialConstant = 10;
+    const int AspirationInitialMaterialWeight = 1600;
+    const int AspirationResearchWeight = 0;
+    const int AspirationWindowMultiplier = 50;
+    const int AspirationWindowConstant = 200;
 
   // Different node types, used as a template parameter
   enum NodeType { NonPV, PV };
@@ -359,6 +378,8 @@ void Thread::search() {
 
   multiPV = std::min(multiPV, rootMoves.size());
 
+  int researches = 0;
+
   // Iterative deepening loop until requested to stop or the target depth is reached
   while (   (rootDepth = rootDepth + ONE_PLY) < DEPTH_MAX
          && !Signals.stop
@@ -381,13 +402,16 @@ void Thread::search() {
       for (RootMove& rm : rootMoves)
           rm.previousScore = rm.score;
 
+      int researchesLastRootDepth = researches;
+      researches = 0;
+
       // MultiPV loop. We perform a full root search for each PV line
       for (PVIdx = 0; PVIdx < multiPV && !Signals.stop; ++PVIdx)
       {
           // Reset aspiration window starting size
           if (rootDepth >= 5 * ONE_PLY)
           {
-              delta = Value(18);
+              delta = Value(AspirationInitialConstant + rootPos.non_pawn_material() / AspirationInitialMaterialWeight);
               alpha = std::max(rootMoves[PVIdx].previousScore - delta,-VALUE_INFINITE);
               beta  = std::min(rootMoves[PVIdx].previousScore + delta, VALUE_INFINITE);
           }
@@ -442,7 +466,9 @@ void Thread::search() {
               else
                   break;
 
-              delta += delta / 4 + 5;
+              delta = (AspirationWindowMultiplier * delta + AspirationWindowConstant) / 40;
+
+              if (PVIdx == 0) researches++;
 
               assert(alpha >= -VALUE_INFINITE && beta <= VALUE_INFINITE);
           }
