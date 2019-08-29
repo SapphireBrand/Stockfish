@@ -180,8 +180,8 @@ enum Value : int {
   VALUE_INFINITE  = 32001,
   VALUE_NONE      = 32002,
 
-  VALUE_MATE_IN_MAX_PLY  =  VALUE_MATE - 2 * MAX_PLY,
-  VALUE_MATED_IN_MAX_PLY = -VALUE_MATE + 2 * MAX_PLY,
+  VALUE_MATE_IN_MAX_PLY  =  (int)VALUE_MATE - 2 * MAX_PLY,
+  VALUE_MATED_IN_MAX_PLY = -(int)VALUE_MATE + 2 * MAX_PLY,
 
   PawnValueMg   = 188,   PawnValueEg   = 248,
   KnightValueMg = 764,   KnightValueEg = 848,
@@ -207,20 +207,17 @@ enum Piece {
 
 extern Value PieceValue[PHASE_NB][PIECE_NB];
 
-enum Depth : int {
+typedef int Depth;
 
-  ONE_PLY = 1,
+enum DepthConstants : int {
 
-  DEPTH_ZERO          =  0 * ONE_PLY,
-  DEPTH_QS_CHECKS     =  0 * ONE_PLY,
-  DEPTH_QS_NO_CHECKS  = -1 * ONE_PLY,
-  DEPTH_QS_RECAPTURES = -5 * ONE_PLY,
+  DEPTH_ZERO          =  0,
+  DEPTH_QS_CHECKS     =  0,
+  DEPTH_QS_NO_CHECKS  = -1,
+  DEPTH_QS_RECAPTURES = -5,
 
-  DEPTH_NONE = -6 * ONE_PLY,
-  DEPTH_MAX  = MAX_PLY * ONE_PLY
+  DEPTH_NONE = -6
 };
-
-static_assert(!(ONE_PLY & (ONE_PLY - 1)), "ONE_PLY is not a power of 2");
 
 enum Square {
   SQ_A1, SQ_B1, SQ_C1, SQ_D1, SQ_E1, SQ_F1, SQ_G1, SQ_H1,
@@ -237,13 +234,13 @@ enum Square {
 
   NORTH =  8,
   EAST  =  1,
-  SOUTH = -NORTH,
-  WEST  = -EAST,
+  SOUTH = -(int)NORTH,
+  WEST  = -(int)EAST,
 
-  NORTH_EAST = NORTH + EAST,
-  SOUTH_EAST = SOUTH + EAST,
-  SOUTH_WEST = SOUTH + WEST,
-  NORTH_WEST = NORTH + WEST
+  NORTH_EAST = (int)NORTH + (int)EAST,
+  SOUTH_EAST = (int)SOUTH + (int)EAST,
+  SOUTH_WEST = (int)SOUTH + (int)WEST,
+  NORTH_WEST = (int)NORTH + (int)WEST
 };
 
 enum File : int {
@@ -302,7 +299,6 @@ ENABLE_FULL_OPERATORS_ON(Value)
 ENABLE_FULL_OPERATORS_ON(PieceType)
 ENABLE_FULL_OPERATORS_ON(Piece)
 ENABLE_FULL_OPERATORS_ON(Color)
-ENABLE_FULL_OPERATORS_ON(Depth)
 ENABLE_FULL_OPERATORS_ON(Square)
 ENABLE_FULL_OPERATORS_ON(File)
 ENABLE_FULL_OPERATORS_ON(Rank)
@@ -344,7 +340,7 @@ inline Color operator~(Color c) {
 }
 
 inline Square operator~(Square s) {
-  return Square(s ^ SQ_A8); // Vertical flip SQ_A1 -> SQ_A8
+  return Square(s ^ (int)SQ_A8); // Vertical flip SQ_A1 -> SQ_A8
 }
 
 inline Piece operator~(Piece pc) {
