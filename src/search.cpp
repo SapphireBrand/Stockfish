@@ -1498,7 +1498,11 @@ moves_loop: // When in check, search starts from here
               if (PvNode && value < beta) // Update alpha here!
                   alpha = value;
               else
+              {
+                  // The side to move has a refuting move, so the search result is valid for one ply, too:
+                  ttDepth = ONE_PLY;
                   break; // Fail high
+              }
           }
        }
     }
