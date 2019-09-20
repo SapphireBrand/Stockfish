@@ -110,6 +110,9 @@ namespace {
 
 namespace Material {
 
+Endgame<KXK> Entry::king_and_pawn_evaluation(WHITE);
+
+
 /// Material::probe() looks up the current position's material configuration in
 /// the material hash table. It returns a pointer to the Entry if the position
 /// is found. Otherwise a new Entry is computed and stored there, so we don't
@@ -171,6 +174,8 @@ Entry* probe(const Position& pos) {
 
   if (npm_w + npm_b == VALUE_ZERO && pos.pieces(PAWN)) // Only pawns on the board
   {
+      e->set_king_and_pawn();
+
       if (!pos.count<PAWN>(BLACK))
       {
           assert(pos.count<PAWN>(WHITE) >= 2);

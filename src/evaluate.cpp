@@ -162,8 +162,12 @@ namespace {
     Value value();
 
   private:
+    Value fullEvaluator();
+    Value kpEvaluator();
     template<Color Us> void initialize();
     template<Color Us, PieceType Pt> Score pieces();
+    template<Color Us> Score kpKing() const;
+    template<Color Us> Score kpThreats() const;
     template<Color Us> Score king() const;
     template<Color Us> Score threats() const;
     template<Color Us> Score passed() const;
@@ -793,8 +797,13 @@ namespace {
     // If we have a specialized evaluation function for the current material
     // configuration, call it and return.
     if (me->specialized_eval_exists())
-        return me->evaluate(pos);
+      return me->is_king_and_pawn() ? kpEvaluator() : me->evaluate(pos);
 
+    return fullEvaluator();
+  }
+
+  template<Tracing T>
+  Value Evaluation<T>::fullEvaluator() {
     // Initialize score by reading the incrementally updated scores included in
     // the position object (material + piece square tables) and the material
     // imbalance. Score is computed internally from the white point of view.
@@ -850,6 +859,142 @@ namespace {
            + Eval::Tempo;
   }
 
+  // Evaluation::king() assigns bonuses and penalties to a king of a given color
+  template<Tracing T> template<Color Us>
+  Score Evaluation<T>::kpKing() const {
+
+    constexpr Color    Them = (Us == WHITE ? BLACK : WHITE);
+    constexpr Bitboard Camp = (Us == WHITE ? AllSquares ^ Rank6BB ^ Rank7BB ^ Rank8BB
+                                           : AllSquares ^ Rank1BB ^ Rank2BB ^ Rank3BB);
+
+    // Init the score with king shelter and enemy pawns storm
+    Score score = pe->king_safety<Us>(pos);
+
+    // Attacked king ring points defended at most once by our king
+    Bitboard weak = kingRing[Us]
+      & attackedBy[Them][ALL_PIECES]
+      & ~attackedBy2[Us]
+      & (~attackedBy[Us][ALL_PIECES] | attackedBy[Us][KING]);
+
+    // Find the squares that opponent attacks in our king flank, and the squares
+    // which are attacked twice in that flank.
+    Bitboard kingFlank = KingFlank[file_of(pos.square<KING>(Us))];
+    Bitboard b1 = attackedBy[Them][ALL_PIECES] & kingFlank & Camp;
+    Bitboard b2 = b1 & attackedBy2[Them];
+
+    int kingFlankAttacks = popcount(b1) + popcount(b2);
+
+    int kingDanger = 185 * popcount(weak)
+      - 873
+      - 6 * mg_value(score) / 8
+      + 5 * kingFlankAttacks * kingFlankAttacks / 16
+      - 7;
+
+    // Transform the kingDanger units into a Score, and subtract it from the evaluation
+    if (kingDanger > 100)
+      score -= make_score(kingDanger * kingDanger / 4096, kingDanger / 16);
+
+    // Penalty when our king is on a pawnless flank
+    if (!(pos.pieces(PAWN) & kingFlank))
+      score -= PawnlessFlank;
+
+    // Penalty if king flank is under attack, potentially moving toward the king
+    score -= FlankAttacks * kingFlankAttacks;
+
+    if (T)
+      Trace::add(KING, Us, score);
+
+    return score;
+  }
+
+  // Evaluation::threats() assigns bonuses according to the types of the
+  // attacking and the attacked pieces.
+  template<Tracing T> template<Color Us>
+  Score Evaluation<T>::kpThreats() const {
+
+    constexpr Color     Them = (Us == WHITE ? BLACK : WHITE);
+    constexpr Direction Up = (Us == WHITE ? NORTH : SOUTH);
+    constexpr Bitboard  TRank3BB = (Us == WHITE ? Rank3BB : Rank6BB);
+
+    // Squares strongly protected by the enemy, either because they defend the
+    // square with a pawn, or because they defend the square twice and we don't.
+    Bitboard stronglyProtected = attackedBy[Them][PAWN]
+      | (attackedBy2[Them] & ~attackedBy2[Us]);
+
+    // Bonus for restricting their piece moves
+    Bitboard b = attackedBy[Them][ALL_PIECES]
+      & ~stronglyProtected
+      & attackedBy[Us][ALL_PIECES];
+
+    Score score = RestrictedPiece * popcount(b);
+
+    // Enemies not strongly protected and under our attack
+    Bitboard weak = pos.pieces(Them) & ~stronglyProtected & attackedBy[Us][ALL_PIECES];
+
+    // Bonus according to the kind of attacking pieces
+    if (weak)
+    {
+      if (weak & attackedBy[Us][KING])
+        score += ThreatByKing;
+
+      score += Hanging * popcount(weak & ~attackedBy[Them][ALL_PIECES]);
+    }
+
+    // Protected or unattacked squares
+    Bitboard safe = ~attackedBy[Them][ALL_PIECES] | attackedBy[Us][ALL_PIECES];
+
+    // Find squares where our pawns can push on the next move
+    b = shift<Up>(pos.pieces(Us, PAWN)) & ~pos.pieces();
+    b |= shift<Up>(b & TRank3BB) & ~pos.pieces();
+
+    // Keep only the squares which are relatively safe
+    b &= ~attackedBy[Them][PAWN] & safe;
+
+    // Bonus for safe checks on the next move
+    b = pawn_attacks_bb<Us>(b) & pos.pieces(Them, KING);
+    score += ThreatByPawnPush * popcount(b);
+
+    if (T)
+      Trace::add(THREAT, Us, score);
+
+    return score;
+  }
+
+  template<Tracing T>
+  Value Evaluation<T>::kpEvaluator() {
+    // Probe the pawn hash table
+    pe = Pawns::probe(pos);
+
+    // Initialize score by reading the incrementally updated scores included in
+    // the position object (material + piece square tables) and the material
+    // imbalance. Score is computed internally from the white point of view.
+    Score score = pos.psq_score() + me->imbalance() + pos.this_thread()->contempt
+      + pe->pawn_score(WHITE) - pe->pawn_score(BLACK);
+
+    initialize<WHITE>();
+    initialize<BLACK>();
+
+    score += kpKing<WHITE>() - kpKing<   BLACK>()
+        + kpThreats<WHITE>() - kpThreats<BLACK>()
+        + passed<   WHITE>() - passed<   BLACK>();
+
+    score += initiative(score);
+
+    // Apply the endgame scaling factor:
+    Value v = eg_value(score) * scale_factor(eg_value(score)) / SCALE_FACTOR_NORMAL;
+
+    // In case of tracing add all remaining individual evaluation terms
+    if (T)
+    {
+      Trace::add(MATERIAL, pos.psq_score());
+      Trace::add(IMBALANCE, me->imbalance());
+      Trace::add(PAWN, pe->pawn_score(WHITE), pe->pawn_score(BLACK));
+      Trace::add(TOTAL, score);
+    }
+
+    return  (pos.side_to_move() == WHITE ? v : -v) // Side to move point of view
+      + Eval::Tempo;
+  }
 } // namespace
 
 

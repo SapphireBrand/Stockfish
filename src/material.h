@@ -44,6 +44,13 @@ struct Entry {
   bool specialized_eval_exists() const { return evaluationFunction != nullptr; }
   Value evaluate(const Position& pos) const { return (*evaluationFunction)(pos); }
 
+  // king_and_pawn_evaluation is declared as Endgame<KXK>, but is never actually called.
+  // king_and_pawn_evaluation is basically a flag that an entry uses to
+  // distinguish K&P endgames from other specialized evaluation functions.
+  static Endgame<KXK> king_and_pawn_evaluation;
+  bool is_king_and_pawn() const { return evaluationFunction == &king_and_pawn_evaluation; }
+  void set_king_and_pawn() { evaluationFunction = &king_and_pawn_evaluation; }
+
   // scale_factor takes a position and a color as input and returns a scale factor
   // for the given color. We have to provide the position in addition to the color
   // because the scale factor may also be a function which should be applied to
