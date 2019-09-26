@@ -84,7 +84,7 @@ namespace {
     Bitboard doubleAttackThem = pawn_double_attacks_bb<Them>(theirPawns);
 
     e->passedPawns[Us] = e->pawnAttacksSpan[Us] = 0;
-    e->kingSquares[Us] = SQ_NONE;
+    e->kingSquares[Us][0] = e->kingSquares[Us][1] = (uint8_t)SQ_NONE;
     e->pawnAttacks[Us] = pawn_attacks_bb<Us>(ourPawns);
 
     // Loop through all pawns of the current color and score each pawn
@@ -218,8 +218,6 @@ template<Color Us>
 Score Entry::do_king_safety(const Position& pos) {
 
   Square ksq = pos.square<KING>(Us);
-  kingSquares[Us] = ksq;
-  castlingRights[Us] = pos.castling_rights(Us);
 
   Score shelters[3] = { evaluate_shelter<Us>(pos, ksq),
                         make_score(-VALUE_INFINITE, 0),
@@ -245,7 +243,12 @@ Score Entry::do_king_safety(const Position& pos) {
   else while (pawns)
       minPawnDist = std::min(minPawnDist, distance(ksq, pop_lsb(&pawns)));
 
-  return shelters[0] - make_score(0, 16 * minPawnDist);
+  // Store the result in an arbitrary king safety entry location.
+  static int arbitraryIndex;
+  int index = kingSquares[Us][0] == SQ_NONE ? 0 : kingSquares[Us][1] == SQ_NONE ? 1 : ++arbitraryIndex & 1;
+  kingSquares[Us][index] = (uint8_t) ksq;
+  castlingRights[Us][index] = (uint8_t) pos.castling_rights(Us);
+  return kingSafety[Us][index] = shelters[0] - make_score(0, 16 * minPawnDist);
 }
 
 // Explicit template instantiation
