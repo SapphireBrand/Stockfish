@@ -84,7 +84,7 @@ namespace {
     Bitboard doubleAttackThem = pawn_double_attacks_bb<Them>(theirPawns);
 
     e->passedPawns[Us] = e->pawnAttacksSpan[Us] = 0;
-    e->kingSquares[Us] = SQ_NONE;
+    e->set_kingSquare<Us>(SQ_NONE);
     e->pawnAttacks[Us] = pawn_attacks_bb<Us>(ourPawns);
 
     // Loop through all pawns of the current color and score each pawn
@@ -218,8 +218,8 @@ template<Color Us>
 Score Entry::do_king_safety(const Position& pos) {
 
   Square ksq = pos.square<KING>(Us);
-  kingSquares[Us] = ksq;
-  castlingRights[Us] = pos.castling_rights(Us);
+  set_kingSquare<Us>(ksq);
+  set_castlingRights<Us>(pos);
 
   Score shelters[3] = { evaluate_shelter<Us>(pos, ksq),
                         make_score(-VALUE_INFINITE, 0),

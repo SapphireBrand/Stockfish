@@ -41,9 +41,15 @@ struct Entry {
 
   template<Color Us>
   Score king_safety(const Position& pos) {
-    return  kingSquares[Us] == pos.square<KING>(Us) && castlingRights[Us] == pos.castling_rights(Us)
+    return  kingSquares[Us] == (uint8_t)pos.square<KING>(Us) && castlingRights[Us] == (uint8_t)pos.castling_rights(Us)
           ? kingSafety[Us] : (kingSafety[Us] = do_king_safety<Us>(pos));
   }
+
+  template<Color Us, typename T>
+  void set_kingSquare(T ksq) { kingSquares[Us] = (uint8_t)ksq; }
+
+  template<Color Us>
+  void set_castlingRights(const Position& pos) { castlingRights[Us] = (uint8_t)pos.castling_rights(Us); }
 
   template<Color Us>
   Score do_king_safety(const Position& pos);
@@ -56,9 +62,9 @@ struct Entry {
   Bitboard passedPawns[COLOR_NB];
   Bitboard pawnAttacks[COLOR_NB];
   Bitboard pawnAttacksSpan[COLOR_NB];
-  Square kingSquares[COLOR_NB];
   Score kingSafety[COLOR_NB];
-  int castlingRights[COLOR_NB];
+  uint8_t kingSquares[COLOR_NB];
+  uint8_t castlingRights[COLOR_NB];
 };
 
 typedef HashTable<Entry, 131072> Table;
