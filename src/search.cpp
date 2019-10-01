@@ -986,7 +986,7 @@ moves_loop: // When in check, search starts from here
           // search without the ttMove. So we assume this expected Cut-node is not singular,
           // that multiple moves fail high, and we can prune the whole subtree by returning
           // a soft bound.
-          else if (   eval >= beta
+          else if ((depth >= 7 * ONE_PLY || depth == 6 && pos.non_pawn_material() <= 2 * QueenValueEg) && eval >= beta
                    && singularBeta >= beta)
               return singularBeta;
       }
