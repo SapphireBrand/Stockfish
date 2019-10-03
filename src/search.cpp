@@ -1122,7 +1122,9 @@ moves_loop: // When in check, search starts from here
                              + (*contHist[0])[movedPiece][to_sq(move)]
                              + (*contHist[1])[movedPiece][to_sq(move)]
                              + (*contHist[3])[movedPiece][to_sq(move)]
-                             - 4729;
+                             - (!inCheck && !givesCheck && to_sq(move) == from_sq((ss - 2)->currentMove) && from_sq(move) == to_sq((ss - 2)->currentMove)
+                                   ? 4729 + 8192
+                                   : 4729);
 
               // Reset statScore to zero if negative and most stats shows >= 0
               if (    ss->statScore < 0
