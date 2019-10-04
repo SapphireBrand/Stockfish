@@ -1131,6 +1131,8 @@ moves_loop: // When in check, search starts from here
                   && thisThread->mainHistory[us][from_to(move)] >= 0)
                   ss->statScore = 0;
 
+              auto statScore = ss->statScore;
+
               // Decrease/increase reduction by comparing opponent's stat score (~10 Elo)
               if (ss->statScore >= -99 && (ss-1)->statScore < -116)
                   r -= ONE_PLY;
@@ -1138,8 +1140,12 @@ moves_loop: // When in check, search starts from here
               else if ((ss-1)->statScore >= -117 && ss->statScore < -144)
                   r += ONE_PLY;
 
+              // Reduce depth if the move returns a piece to the square it occupied last turn. 
+              if (!inCheck && !givesCheck && to_sq(move) == from_sq((ss - 2)->currentMove) && from_sq(move) == to_sq((ss - 2)->currentMove))
+                statScore -= 8192;
+
               // Decrease/increase reduction for moves with a good/bad history (~30 Elo)
-              r -= ss->statScore / 16384 * ONE_PLY;
+              r -= statScore / 16384 * ONE_PLY;
           }
 
           Depth d = clamp(newDepth - r, ONE_PLY, newDepth);
