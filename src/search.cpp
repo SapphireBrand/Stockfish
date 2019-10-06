@@ -1102,43 +1102,45 @@ moves_loop: // When in check, search starts from here
 
           if (!captureOrPromotion)
           {
-              // Increase reduction if ttMove is a capture (~0 Elo)
+            ss->statScore = thisThread->mainHistory[us][from_to(move)]
+              + (*contHist[0])[movedPiece][to_sq(move)]
+              + (*contHist[1])[movedPiece][to_sq(move)]
+              + (*contHist[3])[movedPiece][to_sq(move)]
+              - 4729;
+
+            // Reset statScore to zero if negative and most stats shows >= 0
+            if (ss->statScore < 0
+              && (*contHist[0])[movedPiece][to_sq(move)] >= 0
+              && (*contHist[1])[movedPiece][to_sq(move)] >= 0
+              && thisThread->mainHistory[us][from_to(move)] >= 0)
+              ss->statScore = 0;
+
+            auto statScore = ss->statScore;
+
+            // Increase reduction if ttMove is a capture (~0 Elo)
               if (ttCapture)
-                  r++;
+                statScore -= 16081;
 
               // Increase reduction for cut nodes (~5 Elo)
               if (cutNode)
-                  r += 2;
+                statScore -= 2 * 16284;
 
               // Decrease reduction for moves that escape a capture. Filter out
               // castling moves, because they are coded as "king captures rook" and
               // hence break make_move(). (~5 Elo)
               else if (    type_of(move) == NORMAL
                        && !pos.see_ge(reverse_move(move)))
-                  r -= 2;
-
-              ss->statScore =  thisThread->mainHistory[us][from_to(move)]
-                             + (*contHist[0])[movedPiece][to_sq(move)]
-                             + (*contHist[1])[movedPiece][to_sq(move)]
-                             + (*contHist[3])[movedPiece][to_sq(move)]
-                             - 4729;
-
-              // Reset statScore to zero if negative and most stats shows >= 0
-              if (    ss->statScore < 0
-                  && (*contHist[0])[movedPiece][to_sq(move)] >= 0
-                  && (*contHist[1])[movedPiece][to_sq(move)] >= 0
-                  && thisThread->mainHistory[us][from_to(move)] >= 0)
-                  ss->statScore = 0;
+                statScore += 2 * 16025;
 
               // Decrease/increase reduction by comparing opponent's stat score (~10 Elo)
               if (ss->statScore >= -99 && (ss-1)->statScore < -116)
-                  r--;
+                statScore += 15500;
 
               else if ((ss-1)->statScore >= -117 && ss->statScore < -144)
-                  r++;
+                statScore -= 16384;
 
               // Decrease/increase reduction for moves with a good/bad history (~30 Elo)
-              r -= ss->statScore / 16384;
+              r -= statScore / 15384;
           }
 
           Depth d = clamp(newDepth - r, 1, newDepth);
