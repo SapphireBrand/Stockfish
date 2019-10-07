@@ -725,6 +725,9 @@ namespace {
                     - 36 * almostUnwinnable
                     -103 ;
 
+    auto delta = abs(eg - mg) - 250;
+    if (delta > 0) complexity += delta / 32;
+
     // Now apply the bonus: note that we find the attacking side by extracting the
     // sign of the midgame or endgame values, and that we carefully cap the bonus
     // so that the midgame and endgame scores do not change sign after the bonus.
