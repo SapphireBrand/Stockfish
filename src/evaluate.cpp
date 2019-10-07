@@ -167,7 +167,7 @@ namespace {
     template<Color Us> Score passed() const;
     template<Color Us> Score space() const;
     ScaleFactor scale_factor(Value eg) const;
-    Score initiative(Score score) const;
+    Score initiative(Score score, ScaleFactor sf) const;
 
     const Position& pos;
     Material::Entry* me;
@@ -701,7 +701,7 @@ namespace {
   // known attacking/defending status of the players.
 
   template<Tracing T>
-  Score Evaluation<T>::initiative(Score score) const {
+  Score Evaluation<T>::initiative(Score score, ScaleFactor sf) const {
 
     Value mg = mg_value(score);
     Value eg = eg_value(score);
@@ -724,6 +724,9 @@ namespace {
                     + 49 * !pos.non_pawn_material()
                     - 36 * almostUnwinnable
                     -103 ;
+
+    auto stdev = (int)((int(mg) * int(SCALE_FACTOR_NORMAL) - int(eg) * int(sf)) * sqrt(int(me->game_phase()) * int(PHASE_MIDGAME - me->game_phase())) / (int(SCALE_FACTOR_NORMAL) * int(PHASE_MIDGAME)));
+    complexity += stdev - 29;
 
     // Now apply the bonus: note that we find the attacking side by extracting the
     // sign of the midgame or endgame values, and that we carefully cap the bonus
@@ -811,10 +814,10 @@ namespace {
             + passed< WHITE>() - passed< BLACK>()
             + space<  WHITE>() - space<  BLACK>();
 
-    score += initiative(score);
+    ScaleFactor sf = scale_factor(eg_value(score));
+    score += initiative(score, sf);
 
     // Interpolate between a middlegame and a (scaled by 'sf') endgame score
-    ScaleFactor sf = scale_factor(eg_value(score));
     v =  mg_value(score) * int(me->game_phase())
        + eg_value(score) * int(PHASE_MIDGAME - me->game_phase()) * sf / SCALE_FACTOR_NORMAL;
 
