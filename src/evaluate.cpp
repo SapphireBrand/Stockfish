@@ -723,6 +723,7 @@ namespace {
                     + 18 * pawnsOnBothFlanks
                     + 49 * !pos.non_pawn_material()
                     - 36 * almostUnwinnable
+                    + (int(eg) * int(mg) > 0 ? 0 : abs(int(eg - mg)) > 30 ? 10 : 5)
                     -103 ;
 
     // Now apply the bonus: note that we find the attacking side by extracting the
