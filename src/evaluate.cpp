@@ -716,6 +716,10 @@ namespace {
                            &&  outflanking < 0
                            && !pawnsOnBothFlanks;
 
+    int phaseDiff = 0;
+    if (int(eg) * int(mg) < 0)
+      phaseDiff = std::min(0, std::max(10, abs(int(eg - mg)) / 64));
+
     // Compute the initiative bonus for the attacking side
     int complexity =   9 * pe->passed_count()
                     + 11 * pos.count<PAWN>()
@@ -723,6 +727,7 @@ namespace {
                     + 18 * pawnsOnBothFlanks
                     + 49 * !pos.non_pawn_material()
                     - 36 * almostUnwinnable
+                    + phaseDiff
                     -103 ;
 
     // Now apply the bonus: note that we find the attacking side by extracting the
