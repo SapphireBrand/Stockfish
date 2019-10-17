@@ -166,6 +166,7 @@ namespace {
     template<Color Us> Score threats() const;
     template<Color Us> Score passed() const;
     template<Color Us> Score space() const;
+    template<Color Us> Score extension() const;
     ScaleFactor scale_factor(Value eg) const;
     Score initiative(Score score) const;
 
@@ -667,30 +668,58 @@ namespace {
   Score Evaluation<T>::space() const {
 
     if (pos.non_pawn_material() < SpaceThreshold)
-        return SCORE_ZERO;
+      return SCORE_ZERO;
 
-    constexpr Color Them     = (Us == WHITE ? BLACK : WHITE);
+    constexpr Color Them = (Us == WHITE ? BLACK : WHITE);
     constexpr Direction Down = (Us == WHITE ? SOUTH : NORTH);
     constexpr Bitboard SpaceMask =
       Us == WHITE ? CenterFiles & (Rank2BB | Rank3BB | Rank4BB)
-                  : CenterFiles & (Rank7BB | Rank6BB | Rank5BB);
+      : CenterFiles & (Rank7BB | Rank6BB | Rank5BB);
 
     // Find the available squares for our pieces inside the area defined by SpaceMask
-    Bitboard safe =   SpaceMask
-                   & ~pos.pieces(Us, PAWN)
-                   & ~attackedBy[Them][PAWN];
+    Bitboard safe = SpaceMask
+      & ~pos.pieces(Us, PAWN)
+      & ~attackedBy[Them][PAWN];
 
     // Find all squares which are at most three squares behind some friendly pawn
     Bitboard behind = pos.pieces(Us, PAWN);
     behind |= shift<Down>(behind);
-    behind |= shift<Down+Down>(behind);
+    behind |= shift<Down + Down>(behind);
 
     int bonus = popcount(safe) + popcount(behind & safe & ~attackedBy[Them][ALL_PIECES]);
     int weight = pos.count<ALL_PIECES>(Us) - 1;
     Score score = make_score(bonus * weight * weight / 16, 0);
 
     if (T)
-        Trace::add(SPACE, Us, score);
+      Trace::add(SPACE, Us, score);
+
+    return score;
+  }
+
+  template<Tracing T> template<Color Us>
+  Score Evaluation<T>::extension() const {
+
+    if (pos.non_pawn_material() > SpaceThreshold)
+      return SCORE_ZERO;
+
+    constexpr Direction Down = (Us == WHITE ? SOUTH : NORTH);
+    constexpr Bitboard SpaceMask =
+      Us == WHITE ? CenterFiles & (Rank3BB | Rank4BB | Rank5BB)
+      : CenterFiles & (Rank6BB | Rank5BB | Rank4BB);
+
+    // Find the total area behind our central pawns
+    Bitboard behind = pos.pieces(Us, PAWN);
+    behind |= shift<Down>(behind);
+    behind |= shift<Down + Down>(behind);
+    behind &= SpaceMask
+      & ~pos.pieces(Us, PAWN)
+      & ~attackedBy[Us][ALL_PIECES];
+
+    int malus = -popcount(behind) * 10;
+    Score score = make_score(0, malus);
+
+    if (T)
+      Trace::add(SPACE, Us, score);
 
     return score;
   }
@@ -809,7 +838,8 @@ namespace {
     score +=  king<   WHITE>() - king<   BLACK>()
             + threats<WHITE>() - threats<BLACK>()
             + passed< WHITE>() - passed< BLACK>()
-            + space<  WHITE>() - space<  BLACK>();
+            + space<  WHITE>() - space<  BLACK>()
+            + extension<WHITE>() - extension<BLACK>();
 
     score += initiative(score);
 
