@@ -22,6 +22,7 @@
 #include <cassert>
 #include <cstring>   // For std::memset
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 
 #include "bitboard.h"
@@ -637,6 +638,12 @@ namespace {
                     k += 5;
 
                 bonus += make_score(k * w, k * w);
+
+                if (pos.non_pawn_material(Them) == 0
+                    && 0 == (pos.pieces(Them, PAWN) & passed_pawn_span(Us, s))
+                    && 1 + RANK_8 - r < king_proximity(Them, s + Up * (RANK_8 - r))) {
+                  bonus += make_score(0, 100);
+                }
             }
         } // r > RANK_3
 
