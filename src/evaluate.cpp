@@ -166,6 +166,7 @@ namespace {
     template<Color Us> Score threats() const;
     template<Color Us> Score passed() const;
     template<Color Us> Score space() const;
+    template<Color Us> Score extension() const;
     ScaleFactor scale_factor(Value eg) const;
     Score initiative(Score score) const;
 
@@ -666,31 +667,43 @@ namespace {
   template<Tracing T> template<Color Us>
   Score Evaluation<T>::space() const {
 
-    if (pos.non_pawn_material() < SpaceThreshold)
-        return SCORE_ZERO;
-
-    constexpr Color Them     = (Us == WHITE ? BLACK : WHITE);
+    constexpr Color Them = (Us == WHITE ? BLACK : WHITE);
     constexpr Direction Down = (Us == WHITE ? SOUTH : NORTH);
     constexpr Bitboard SpaceMask =
       Us == WHITE ? CenterFiles & (Rank2BB | Rank3BB | Rank4BB)
-                  : CenterFiles & (Rank7BB | Rank6BB | Rank5BB);
+      : CenterFiles & (Rank7BB | Rank6BB | Rank5BB);
 
-    // Find the available squares for our pieces inside the area defined by SpaceMask
-    Bitboard safe =   SpaceMask
-                   & ~pos.pieces(Us, PAWN)
-                   & ~attackedBy[Them][PAWN];
+    Score score;
 
     // Find all squares which are at most three squares behind some friendly pawn
     Bitboard behind = pos.pieces(Us, PAWN);
     behind |= shift<Down>(behind);
-    behind |= shift<Down+Down>(behind);
+    behind |= shift<Down + Down>(behind);
 
-    int bonus = popcount(safe) + popcount(behind & safe & ~attackedBy[Them][ALL_PIECES]);
-    int weight = pos.count<ALL_PIECES>(Us) - 1;
-    Score score = make_score(bonus * weight * weight / 16, 0);
+    if (pos.non_pawn_material() < SpaceThreshold) {
+      // Find the total area behind our central pawns
+      behind |= shift<Down + Down + Down + Down>(behind);
+      Bitboard safe = SpaceMask
+        & behind
+        & ~pos.pieces(Us, PAWN)
+        & ~attackedBy[Us][ALL_PIECES];
+
+      int malus = -popcount(safe) * 10;
+      score = make_score(0, malus);
+    }
+    else {
+      // Find the available squares for our pieces inside the area defined by SpaceMask
+      Bitboard safe = SpaceMask
+        & ~pos.pieces(Us, PAWN)
+        & ~attackedBy[Them][PAWN];
+
+      int bonus = popcount(safe) + popcount(behind & safe & ~attackedBy[Them][ALL_PIECES]);
+      int weight = pos.count<ALL_PIECES>(Us) - 1;
+      score = make_score(bonus * weight * weight / 16, 0);
+    }
 
     if (T)
-        Trace::add(SPACE, Us, score);
+      Trace::add(SPACE, Us, score);
 
     return score;
   }
