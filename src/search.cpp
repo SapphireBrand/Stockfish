@@ -1137,8 +1137,12 @@ moves_loop: // When in check, search starts from here
               else if ((ss-1)->statScore >= -117 && ss->statScore < -144)
                   r++;
 
+              int statScore = ss->statScore;
+              if (!inCheck && !givesCheck && to_sq(move) == from_sq((ss - 2)->currentMove) && from_sq(move) == to_sq((ss - 2)->currentMove))
+                statScore -= 7350;
+
               // Decrease/increase reduction for moves with a good/bad history (~30 Elo)
-              r -= ss->statScore / 16384;
+              r -= statScore / 16384;
           }
 
           Depth d = clamp(newDepth - r, 1, newDepth);
