@@ -482,7 +482,7 @@ const string Position::fen() const {
 /// a pinned or a discovered check piece, according if its color is the opposite
 /// or the same of the color of the slider.
 
-Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners) const {
+template<bool earlyExit> Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners) const {
 
   Bitboard blockers = 0;
   pinners = 0;
@@ -499,6 +499,8 @@ Bitboard Position::slider_blockers(Bitboard sliders, Square s, Bitboard& pinners
 
     if (b && !more_than_one(b))
     {
+        if (earlyExit) return b;
+
         blockers |= b;
         if (b & pieces(color_of(piece_on(s))))
             pinners |= sniperSq;
