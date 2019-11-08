@@ -36,6 +36,10 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "tune.h"
+
+int retreatMalus = 8000;
+TUNE(retreatMalus);
 
 namespace Search {
 
@@ -1139,7 +1143,7 @@ moves_loop: // When in check, search starts from here
 
               int statScore = ss->statScore;
               if (!inCheck && !givesCheck && to_sq(move) == from_sq((ss - 2)->currentMove) && from_sq(move) == to_sq((ss - 2)->currentMove))
-                statScore -= 8000;
+                statScore -= retreatMalus;
 
               // Decrease/increase reduction for moves with a good/bad history (~30 Elo)
               r -= statScore / 16384;
